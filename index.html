@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Library — perspective build animation</title>
+<style>
+  :root{
+    /* ---------------- TWEAKABLE CONFIG ---------------- */
+    --stage-w: 1440px;
+    --stage-h: 800px;
+
+    /* Dramatic two-point perspective (strong convergence). */
+    --persp: 1200px;      /* SMALLER = stronger perspective / more convergence */
+    --rotX: 48deg;        /* tilt back (top of screen recedes) */
+    --rotZ: 32deg;        /* in-plane rotation (rows slope down-right) */
+    --scene-scale: 0.62;  /* fit the tilted plane in the frame */
+
+    /* Float heights above the base, per depth band (px) */
+    --hoverZ-far: 96px;   /* Most Recent (furthest) */
+    --hoverZ-mid: 60px;   /* Item Banks */
+    --hoverZ-near: 32px;  /* Contents (nearest) */
+
+    --dropZ: 520px;       /* height the pieces fall from */
+
+    /* Timing (ms) */
+    --fall-dur: 1000;
+    --merge-dur: 750;
+  }
+
+  html,body{margin:0;height:100%;}
+  body{
+    background:radial-gradient(120% 95% at 80% 6%, #f5f5f5 0%, #eeeeee 45%, #e3e3e3 100%);
+    overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+
+  #frame{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;}
+
+  #stage{
+    position:relative;
+    width:var(--stage-w); height:var(--stage-h);
+    perspective:var(--persp);
+    perspective-origin:50% 42%;
+    transform:scale(var(--fit,1));
+    transform-origin:center center;
+  }
+
+  #scene{
+    position:absolute; inset:0;
+    transform-style:preserve-3d;
+    transform:rotateX(var(--rotX)) rotateZ(var(--rotZ)) scale(var(--scene-scale));
+    transform-origin:50% 48%;
+    will-change:transform;
+  }
+
+  /* Falling pieces. Only transform + opacity animate; each is its own GPU layer. */
+  .layer{
+    position:absolute;
+    transform-style:preserve-3d;
+    backface-visibility:hidden;
+    -webkit-backface-visibility:hidden;
+    will-change:transform, opacity;
+    opacity:0;
+    transform:translate3d(0,0,var(--dropZ));
+  }
+  .layer img{
+    display:block; width:100%; height:100%;
+    backface-visibility:hidden;
+    -webkit-backface-visibility:hidden;
+  }
+
+  /* Positions (top-left, in stage coordinates) */
+  #base   { left:-16px; top:-16px; width:1472px; height:932px; opacity:1; transform:translate3d(0,0,0); }
+  #mr45{ left:0px;    top:146px; width:266px; height:151px; --hz:var(--hoverZ-far); }
+  #mr46{ left:250px;  top:146px; width:266px; height:151px; --hz:var(--hoverZ-far); }
+  #mr47{ left:500px;  top:146px; width:266px; height:151px; --hz:var(--hoverZ-far); }
+  #mr48{ left:750px;  top:146px; width:266px; height:151px; --hz:var(--hoverZ-far); }
+  #mr49{ left:1000px; top:146px; width:266px; height:151px; --hz:var(--hoverZ-far); }
+  #ib1 { left:0px;    top:318px; width:292px; height:171px; --hz:var(--hoverZ-mid); }
+  #ib2 { left:276px;  top:318px; width:292px; height:171px; --hz:var(--hoverZ-mid); }
+  #contents{ left:16px; top:489px; width:1408px; height:500px; --hz:var(--hoverZ-near); }
+
+  /* Hover: floating above the base */
+  .layer.hover{ opacity:1; transform:translate3d(0,0,var(--hz)); }
+  /* Merged: flat on the base */
+  .layer.merged{ opacity:1; transform:translate3d(0,0,0); }
+
+  /* Reload button */
+  #reload{
+    position:absolute; top:64px; right:64px; z-index:20;
+    width:44px; height:44px; border:none; border-radius:50%;
+    background:#fff; color:#603DB8; cursor:pointer;
+    box-shadow:0 4px 14px rgba(0,0,0,.14);
+    display:flex; align-items:center; justify-content:center;
+    transition:transform .2s ease, box-shadow .2s ease;
+  }
+  #reload:hover{ box-shadow:0 6px 18px rgba(0,0,0,.2); }
+  #reload:active{ transform:rotate(-180deg); }
+  #reload svg{ width:22px; height:22px; }
+</style>
+</head>
+<body>
+  <div id="frame">
+    <div id="stage">
+      <button id="reload" title="Replay animation" aria-label="Replay animation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
+          <polyline points="21 3 21 9 15 9"/>
+        </svg>
+      </button>
+
+      <div id="scene">
+        <div class="layer" id="base"><img src="Components/illustration%20base.svg" alt=""></div>
+
+        <div class="layer" id="mr45"><img src="Components/Most%20Recent/Component%2045.svg" alt=""></div>
+        <div class="layer" id="mr46"><img src="Components/Most%20Recent/Component%2046.svg" alt=""></div>
+        <div class="layer" id="mr47"><img src="Components/Most%20Recent/Component%2047.svg" alt=""></div>
+        <div class="layer" id="mr48"><img src="Components/Most%20Recent/Component%2048.svg" alt=""></div>
+        <div class="layer" id="mr49"><img src="Components/Most%20Recent/Component%2049.svg" alt=""></div>
+
+        <div class="layer" id="ib1"><img src="Components/Item%20Banks/Frame%2034407.svg" alt=""></div>
+        <div class="layer" id="ib2"><img src="Components/Item%20Banks/Frame%2034408.svg" alt=""></div>
+
+        <div class="layer" id="contents"><img src="Components/Contents/Frame%2034431.svg" alt=""></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const css = getComputedStyle(document.documentElement);
+  const FALL  = parseFloat(css.getPropertyValue('--fall-dur'));
+  const MERGE = parseFloat(css.getPropertyValue('--merge-dur'));
+  const STAGE_W = 1440, STAGE_H = 800;
+  const stage = document.getElementById('stage');
+
+  function fit(){
+    const s = Math.min(window.innerWidth / STAGE_W, window.innerHeight / STAGE_H);
+    stage.style.setProperty('--fit', s);
+  }
+  window.addEventListener('resize', fit); fit();
+
+  /* Fall order: furthest (Most Recent) first, then Item Banks, Contents last. */
+  const bands = [
+    { ids:['mr45','mr46','mr47','mr48','mr49'], start:0,    inner:95 },
+    { ids:['ib1','ib2'],                        start:640,  inner:150 },
+    { ids:['contents'],                         start:1240, inner:0 }
+  ];
+  const layers = ['mr45','mr46','mr47','mr48','mr49','ib1','ib2','contents'].map(id=>document.getElementById(id));
+  let timers = [];
+  const clearTimers = ()=>{ timers.forEach(clearTimeout); timers = []; };
+
+  const EASE_FALL  = 'cubic-bezier(.22,.68,.28,1)';
+  const EASE_MERGE = 'cubic-bezier(.4,0,.2,1)';
+
+  function reset(){
+    clearTimers();
+    layers.forEach(el=>{ el.style.transition='none'; el.classList.remove('hover','merged'); });
+    void stage.offsetWidth;
+  }
+
+  function play(){
+    reset();
+    let lastSettle = 0;
+    bands.forEach(band=>{
+      band.ids.forEach((id,i)=>{
+        const el = document.getElementById(id);
+        const delay = band.start + i*band.inner;
+        lastSettle = Math.max(lastSettle, delay + FALL);
+        timers.push(setTimeout(()=>{
+          /* opacity resolves fast so the rest of the motion is transform-only */
+          el.style.transition = `transform ${FALL}ms ${EASE_FALL}, opacity 240ms ease-out`;
+          el.classList.add('hover');
+        }, delay));
+      });
+    });
+    timers.push(setTimeout(()=>{
+      layers.forEach(el=>{
+        el.style.transition = `transform ${MERGE}ms ${EASE_MERGE}`;
+        el.classList.remove('hover'); el.classList.add('merged');
+      });
+    }, lastSettle + 1500));
+  }
+
+  let hasPlayed = false;
+  new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting && !hasPlayed){ hasPlayed = true; timers.push(setTimeout(play, 1500)); }
+    });
+  }, { threshold: 0.35 }).observe(stage);
+
+  document.getElementById('reload').addEventListener('click', play);
+  reset();
+})();
+</script>
+</body>
+</html>
